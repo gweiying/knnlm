@@ -18,7 +18,7 @@ import numpy as np
 from fairseq import checkpoint_utils, options, progress_bar, tasks, utils
 from fairseq.data import LMContextWindowDataset
 from fairseq.meters import StopwatchMeter, TimeMeter
-from fairseq.sequence_scorer import SequenceScorer
+from fairseq.generator import SequenceGenerator
 from fairseq.knnlm import KNN_Dstore
 
 
@@ -124,7 +124,7 @@ def main(parsed_args):
     ).next_epoch_itr(shuffle=False)
 
     gen_timer = StopwatchMeter()
-    scorer = SequenceScorer(task.target_dictionary, args.softmax_batch, args=args)
+    scorer = SequenceGenerator(task.target_dictionary, args.softmax_batch, args=args)
 
     score_sum = 0.
     count = 0
@@ -205,22 +205,25 @@ def main(parsed_args):
 
                 sample_id = sample['id'][i]
 
-                tokens = hypo['tokens']
-                tgt_len = tokens.numel()
+                print(hypo['knn_top_i'])
+                print(hypo['knn_ind_i'])
+                print(hypo['positional_scores'])
+#                 tokens = hypo['tokens']
+#                 tgt_len = tokens.numel()
                 pos_scores = hypo['positional_scores'].float()
 
-                if args.add_bos_token:
-                    assert hypo['tokens'][0].item() == task.target_dictionary.bos()
-                    tokens = tokens[1:]
-                    pos_scores = pos_scores[1:]
+#                 if args.add_bos_token:
+#                     assert hypo['tokens'][0].item() == task.target_dictionary.bos()
+#                     tokens = tokens[1:]
+#                     pos_scores = pos_scores[1:]
 
-                skipped_toks = 0
-                if bpe_toks is not None:
-                    for i in range(tgt_len - 1):
-                        if tokens[i].item() in bpe_toks:
-                            skipped_toks += 1
-                            pos_scores[i + 1] += pos_scores[i]
-                            pos_scores[i] = 0
+#                 skipped_toks = 0
+#                 if bpe_toks is not None:
+#                     for i in range(tgt_len - 1):
+#                         if tokens[i].item() in bpe_toks:
+#                             skipped_toks += 1
+#                             pos_scores[i + 1] += pos_scores[i]
+#                             pos_scores[i] = 0
 
                 #inf_scores = pos_scores.eq(float('inf')) | pos_scores.eq(float('-inf'))
                 #if inf_scores.any():
@@ -229,38 +232,38 @@ def main(parsed_args):
                 #        task.target_dictionary.string(tokens[inf_scores.nonzero()])
                 #    )
                 #    pos_scores = pos_scores[(~inf_scores).nonzero()]
-                score_sum += pos_scores.sum().cpu()
-                count += pos_scores.numel() - skipped_toks
+#                 score_sum += pos_scores.sum().cpu()
+#                 count += pos_scores.numel() - skipped_toks
 
-                if args.output_word_probs or args.output_word_stats:
-                    w = ''
-                    word_prob = []
-                    is_bpe = False
-                    for i in range(len(tokens)):
-                        w_ind = tokens[i].item()
-                        w += task.source_dictionary[w_ind]
-                        if bpe_toks is not None and w_ind in bpe_toks:
-                            w = w[:-bpe_len]
-                            is_bpe = True
-                        else:
-                            word_prob.append((w, pos_scores[i].item()))
+#                 if args.output_word_probs or args.output_word_stats:
+#                     w = ''
+#                     word_prob = []
+#                     is_bpe = False
+#                     for i in range(len(tokens)):
+#                         w_ind = tokens[i].item()
+#                         w += task.source_dictionary[w_ind]
+#                         if bpe_toks is not None and w_ind in bpe_toks:
+#                             w = w[:-bpe_len]
+#                             is_bpe = True
+#                         else:
+#                             word_prob.append((w, pos_scores[i].item()))
 
-                            next_prob = None
-                            ind = i + 1
-                            while ind < len(tokens):
-                                if pos_scores[ind].item() != 0:
-                                    next_prob = pos_scores[ind]
-                                    break
-                                ind += 1
+#                             next_prob = None
+#                             ind = i + 1
+#                             while ind < len(tokens):
+#                                 if pos_scores[ind].item() != 0:
+#                                     next_prob = pos_scores[ind]
+#                                     break
+#                                 ind += 1
 
-                            word_stats.setdefault(w, WordStat(w, is_bpe)).add(pos_scores[i].item(), next_prob)
-                            is_bpe = False
-                            w = ''
-                    if args.output_word_probs:
-                        logger.info(
-                            str(int(sample_id)) + " "
-                            + ('\t'.join('{} [{:2f}]'.format(x[0], x[1]) for x in word_prob))
-                        )
+#                             word_stats.setdefault(w, WordStat(w, is_bpe)).add(pos_scores[i].item(), next_prob)
+#                             is_bpe = False
+#                             w = ''
+#                     if args.output_word_probs:
+#                         logger.info(
+#                             str(int(sample_id)) + " "
+#                             + ('\t'.join('{} [{:2f}]'.format(x[0], x[1]) for x in word_prob))
+#                         )
 
             wps_meter.update(sample['ntokens'])
             t.log({'wps': round(wps_meter.avg)})
@@ -291,3 +294,4 @@ def cli_main():
 
 if __name__ == '__main__':
     cli_main()
+
